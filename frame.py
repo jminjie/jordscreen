@@ -9,9 +9,10 @@ from google.oauth2.credentials import Credentials
 from PIL import Image
 from io import BytesIO
 from PIL import ImageTk
+from PIL import ExifTags
 
 AUTO_UPDATE_AT_CYCLE_END = True
-TIME_PER_IMAGE_IN_SECONDS = 60
+TIME_PER_IMAGE_IN_SECONDS = 10
 SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
 
 def get_service():
@@ -31,6 +32,11 @@ def get_service():
             token.write(creds.to_json())
     service = build('gmail', 'v1', credentials=creds)
     return service
+
+def get_updated_messages(service):
+    results = service.users().messages().list(
+            userId='me', q='label:jordscreen').execute()
+    return results.get('messages', [])
 
 def get_message_from_id(service, id):
     # makes a request to get the message
@@ -63,7 +69,27 @@ def get_attachment_from_id(service, msg_id, attachment_id):
 
 def get_image_from_base64url(b64):
     # base64url is slighly different from base64
-    return Image.open(BytesIO(base64.urlsafe_b64decode(b64)))
+    image = Image.open(BytesIO(base64.urlsafe_b64decode(b64)))
+    for orientation in ExifTags.TAGS.keys():
+        if ExifTags.TAGS[orientation]=='Orientation':
+            break
+    exif = image._getexif()
+    if exif is None:
+        print("no exif")
+        return image
+
+    if exif[orientation] == 3:
+        print("rotating 1")
+        image=image.rotate(180, expand=True)
+    elif exif[orientation] == 6:
+        print("rotating 2")
+        image=image.rotate(270, expand=True)
+    elif exif[orientation] == 8:
+        print("rotating 3")
+        image=image.rotate(90, expand=True)
+
+    return image
+
 
 def resize_image(pilImage, w, h):
     imgWidth, imgHeight = pilImage.size
@@ -74,8 +100,7 @@ def resize_image(pilImage, w, h):
         pilImage = pilImage.resize((imgWidth,imgHeight), Image.ANTIALIAS)
     return pilImage
 
-
-def show_next_image(service, messages, root, canvas, w, h, cur_message):
+def show_next_image(service, messages, root, canvas, w, h, cur_message, image_container):
     message = messages[cur_message]
     msg_id = message['id']
     print("msg_id =", msg_id)
@@ -88,47 +113,68 @@ def show_next_image(service, messages, root, canvas, w, h, cur_message):
         attachment = get_attachment_from_id(service, msg_id, attachment_id)
         #TODO only if im is an image type
         pilImage = get_image_from_base64url(attachment)
-        image = ImageTk.PhotoImage(resize_image(pilImage, w, h))
-        imagesprite = canvas.create_image(w/2,h/2,image=image)
-        root.update_idletasks()
-        root.update()
+        global current_image
+        current_image = ImageTk.PhotoImage(resize_image(pilImage, w, h))
+        canvas.itemconfig(image_container, image=current_image)
 
+def on_button_press():
+    print("WE PRESSED THE BUTTON WOOHOO")
 
+def auto_update_image(service, messages, root, canvas, w, h, cur_message, image_container):
+    cur_message += 1
+    if cur_message is len(messages):
+        if AUTO_UPDATE_AT_CYCLE_END:
+            messages = get_updated_messages()
+        cur_message = 0
+
+    show_next_image(service, messages, root, canvas, w, h, cur_message, image_container)
+    root.after(3000, auto_update_image, service, messages, root, canvas, w, h,
+            cur_message, image_container)
+
+current_image = None
 
 def main():
     service = get_service()
-    results = service.users().messages().list(
-            userId='me', q='label:jordscreen').execute()
-    messages = results.get('messages', [])
-
+    messages = get_updated_messages(service)
     create_cache_dir()
 
     if not messages:
-        print("No messages found.")
-    else:
-        print("Message attachments:")
-        root = tkinter.Tk()
-        w, h = root.winfo_screenwidth(), root.winfo_screenheight()
-        root.overrideredirect(1)
-        root.geometry("%dx%d+0+0" % (w, h))
-        root.focus_set()
-        canvas = tkinter.Canvas(root,width=w,height=h)
-        canvas.pack()
-        canvas.configure(background='black')
+        print("No messages. Quitting.")
+        return
 
-        cur_message = 0
-        while True:
-            show_next_image(service, messages, root, canvas, w, h, cur_message)
-            time.sleep(TIME_PER_IMAGE_IN_SECONDS)
-            cur_message = cur_message + 1
-            if cur_message is len(messages):
-                cur_message = 0
-                if AUTO_UPDATE_AT_CYCLE_END:
-                    results = service.users().messages().list(
-                            userId='me', q='label:jordscreen').execute()
-                    messages = results.get('messages', [])
+    root = tkinter.Tk()
+    w, h = root.winfo_screenwidth(), root.winfo_screenheight()
+    root.overrideredirect(1)
+    root.geometry("%dx%d+0+0" % (w, h))
+    root.focus_set()
 
+    button = tkinter.Button(root, text="Press me", command=on_button_press)
+    button.pack()
 
+    canvas = tkinter.Canvas(root, width=w, height=h)
+    canvas.pack()
+    canvas.configure(background='black')
+
+    cur_message = 0
+    message = messages[cur_message]
+    msg_id = message['id']
+    print("msg_id =", msg_id)
+    msg = get_message_from_id(service, msg_id)
+    attachment_id = get_attachment_id_for_simple_msg(msg)
+
+    image_container = None
+    if attachment_id is not None:
+        print("attachment_id = ", attachment_id)
+        attachment = get_attachment_from_id(service, msg_id, attachment_id)
+        #TODO only if im is an image type
+        pilImage = get_image_from_base64url(attachment)
+        global current_image
+        current_image = ImageTk.PhotoImage(resize_image(pilImage, w, h))
+        image_container = canvas.create_image(w/2, h/2, image=current_image)
+
+    root.after(3000, auto_update_image, service, messages, root, canvas, w, h,
+            cur_message, image_container)
+    root.mainloop()
 
 if __name__ == '__main__':
     main()
