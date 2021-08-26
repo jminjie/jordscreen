@@ -12,7 +12,7 @@ from PIL import ImageTk
 from PIL import ExifTags
 
 AUTO_UPDATE_AT_CYCLE_END = True
-TIME_PER_IMAGE_IN_SECONDS = 10
+TIME_PER_IMAGE_IN_MS = 60 * 1000
 SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
 
 def get_service():
@@ -78,6 +78,11 @@ def get_image_from_base64url(b64):
         print("no exif")
         return image
 
+    if orientation not in exif.keys():
+        # handles KeyError 274
+        print("unexpected orientation", orientation)
+        return image
+
     if exif[orientation] == 3:
         print("rotating 1")
         image=image.rotate(180, expand=True)
@@ -90,48 +95,144 @@ def get_image_from_base64url(b64):
 
     return image
 
-
-def resize_image(pilImage, w, h):
-    imgWidth, imgHeight = pilImage.size
-    if imgWidth > w or imgHeight > h:
-        ratio = min(w/imgWidth, h/imgHeight)
-        imgWidth = int(imgWidth*ratio)
-        imgHeight = int(imgHeight*ratio)
-        pilImage = pilImage.resize((imgWidth,imgHeight), Image.ANTIALIAS)
-    return pilImage
-
-def show_next_image(service, messages, root, canvas, w, h, cur_message, image_container):
-    message = messages[cur_message]
-    msg_id = message['id']
-    print("msg_id =", msg_id)
+def get_pil_image_from_id(service, msg_id):
     msg = get_message_from_id(service, msg_id)
-
     attachment_id = get_attachment_id_for_simple_msg(msg)
 
     if attachment_id is not None:
         print("attachment_id = ", attachment_id)
         attachment = get_attachment_from_id(service, msg_id, attachment_id)
-        #TODO only if im is an image type
-        pilImage = get_image_from_base64url(attachment)
-        global current_image
-        current_image = ImageTk.PhotoImage(resize_image(pilImage, w, h))
-        canvas.itemconfig(image_container, image=current_image)
+        return get_image_from_base64url(attachment)
+    else:
+        print("Problem getting attachment.")
+        return None
 
-def on_button_press():
+def on_next_button(display):
+    #TODO
     print("WE PRESSED THE BUTTON WOOHOO")
 
-def auto_update_image(service, messages, root, canvas, w, h, cur_message, image_container):
-    cur_message += 1
-    if cur_message is len(messages):
-        if AUTO_UPDATE_AT_CYCLE_END:
-            messages = get_updated_messages()
-        cur_message = 0
+class Display:
+    def __init__(self, service, messages):
+        self.service = service
+        self.messages = messages
 
-    show_next_image(service, messages, root, canvas, w, h, cur_message, image_container)
-    root.after(3000, auto_update_image, service, messages, root, canvas, w, h,
-            cur_message, image_container)
+        self.root = tkinter.Tk()
+        self.w, self.h = self.root.winfo_screenwidth(), self.root.winfo_screenheight()
+        #TODO
+        #self.root.overrideredirect(1)
+        self.root.geometry("%dx%d+0+0" % (self.w, self.h))
+        self.root.focus_set()
 
-current_image = None
+        self.next_button = tkinter.Button(self.root, text="Previous", command=self.go_to_previous_image)
+        self.next_button.pack()
+        self.next_button = tkinter.Button(self.root, text="Next", command=self.go_to_next_image)
+        self.next_button.pack()
+
+        self.canvas = tkinter.Canvas(self.root, width=self.w, height=self.h)
+        self.canvas.pack()
+        self.canvas.configure(background='black')
+
+    def set_current_image(self, pilImage):
+        self.current_image = ImageTk.PhotoImage(self.resize_image(pilImage))
+        self.image_container = self.canvas.create_image(self.w/2, self.h/2,
+                image=self.current_image)
+
+    def increment_cur_message(self):
+        self.cur_message += 1
+        if self.cur_message == len(self.messages):
+            if AUTO_UPDATE_AT_CYCLE_END:
+                self.messages = get_updated_messages(self.service)
+            self.cur_message = 0
+
+    def decrement_cur_message(self):
+        self.cur_message -= 1
+        if self.cur_message == -1:
+            if AUTO_UPDATE_AT_CYCLE_END:
+                self.messages = get_updated_messages(self.service)
+            self.cur_message = len(self.messages) - 1
+
+    def go_to_previous_image(self):
+        self.root.after_cancel(self.after_id)
+
+        self.decrement_cur_message()
+        message = self.messages[self.cur_message]
+        msg_id = message['id']
+        print("msg_id =", msg_id)
+        msg = get_message_from_id(self.service, msg_id)
+        attachment_id = get_attachment_id_for_simple_msg(msg)
+
+        if attachment_id is not None:
+            print("attachment_id = ", attachment_id)
+            attachment = get_attachment_from_id(self.service, msg_id, attachment_id)
+            #TODO check if this attachment is an image
+            pilImage = get_image_from_base64url(attachment)
+            self.set_current_image(pilImage)
+
+        self.after_id = self.root.after(TIME_PER_IMAGE_IN_MS,
+                self.auto_update_image, self.service, self.messages)
+
+    def go_to_next_image(self):
+        self.root.after_cancel(self.after_id)
+
+        self.increment_cur_message()
+        message = self.messages[self.cur_message]
+        msg_id = message['id']
+        print("msg_id =", msg_id)
+        msg = get_message_from_id(self.service, msg_id)
+        attachment_id = get_attachment_id_for_simple_msg(msg)
+
+        if attachment_id is not None:
+            print("attachment_id = ", attachment_id)
+            attachment = get_attachment_from_id(self.service, msg_id, attachment_id)
+            #TODO check if this attachment is an image
+            pilImage = get_image_from_base64url(attachment)
+            self.set_current_image(pilImage)
+
+        self.after_id = self.root.after(TIME_PER_IMAGE_IN_MS,
+                self.auto_update_image, self.service, self.messages)
+
+
+    def start(self):
+        self.cur_message = 0
+
+        # show first image
+        message = self.messages[self.cur_message]
+        msg_id = message['id']
+        print("msg_id =", msg_id)
+        msg = get_message_from_id(self.service, msg_id)
+        attachment_id = get_attachment_id_for_simple_msg(msg)
+
+        if attachment_id is not None:
+            print("attachment_id = ", attachment_id)
+            attachment = get_attachment_from_id(self.service, msg_id, attachment_id)
+            #TODO check if this attachment is an image
+            pilImage = get_image_from_base64url(attachment)
+            self.set_current_image(pilImage)
+
+        # auto update image
+        self.after_id = self.root.after(TIME_PER_IMAGE_IN_MS,
+                self.auto_update_image, self.service, self.messages)
+        self.root.mainloop()
+
+    def resize_image(self, pilImage):
+        imgWidth, imgHeight = pilImage.size
+        if imgWidth > self.w or imgHeight > self.h:
+            ratio = min(self.w/imgWidth, self.h/imgHeight)
+            imgWidth = int(imgWidth*ratio)
+            imgHeight = int(imgHeight*ratio)
+            pilImage = pilImage.resize((imgWidth,imgHeight), Image.ANTIALIAS)
+        return pilImage
+
+    def auto_update_image(self, service, messages):
+        self.increment_cur_message()
+
+        message = messages[self.cur_message]
+        msg_id = message['id']
+        print("msg_id =", msg_id)
+        self.set_current_image(get_pil_image_from_id(service, msg_id))
+
+        self.after_id = self.root.after(TIME_PER_IMAGE_IN_MS,
+                self.auto_update_image, service, messages)
 
 def main():
     service = get_service()
@@ -142,39 +243,8 @@ def main():
         print("No messages. Quitting.")
         return
 
-    root = tkinter.Tk()
-    w, h = root.winfo_screenwidth(), root.winfo_screenheight()
-    root.overrideredirect(1)
-    root.geometry("%dx%d+0+0" % (w, h))
-    root.focus_set()
-
-    button = tkinter.Button(root, text="Press me", command=on_button_press)
-    button.pack()
-
-    canvas = tkinter.Canvas(root, width=w, height=h)
-    canvas.pack()
-    canvas.configure(background='black')
-
-    cur_message = 0
-    message = messages[cur_message]
-    msg_id = message['id']
-    print("msg_id =", msg_id)
-    msg = get_message_from_id(service, msg_id)
-    attachment_id = get_attachment_id_for_simple_msg(msg)
-
-    image_container = None
-    if attachment_id is not None:
-        print("attachment_id = ", attachment_id)
-        attachment = get_attachment_from_id(service, msg_id, attachment_id)
-        #TODO only if im is an image type
-        pilImage = get_image_from_base64url(attachment)
-        global current_image
-        current_image = ImageTk.PhotoImage(resize_image(pilImage, w, h))
-        image_container = canvas.create_image(w/2, h/2, image=current_image)
-
-    root.after(3000, auto_update_image, service, messages, root, canvas, w, h,
-            cur_message, image_container)
-    root.mainloop()
+    display = Display(service, messages)
+    display.start()
 
 if __name__ == '__main__':
     main()
