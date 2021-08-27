@@ -15,6 +15,8 @@ AUTO_UPDATE_AT_CYCLE_END = True
 TIME_PER_IMAGE_IN_MS = 60 * 1000
 SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
 
+MATTE_SIZE = 100
+
 def get_service():
     creds = None
     if os.path.exists('token.json'):
@@ -107,25 +109,30 @@ class Display:
         self.messages = messages
 
         self.root = tkinter.Tk()
-        self.w, self.h = self.root.winfo_screenwidth(), self.root.winfo_screenheight()
+        self.w, self.h = self.root.winfo_screenwidth() - MATTE_SIZE, self.root.winfo_screenheight() - MATTE_SIZE
         self.root.geometry("%dx%d+0+0" % (self.w, self.h))
         self.root.focus_set()
         self.root.focus()
         self.root.bind('<Escape>', self.close)
         self.root.attributes('-fullscreen', True)
         self.root.title('jordscreen')
+        self.root.configure(background='#EEEEEE')
 
         self.canvas = tkinter.Canvas(self.root, width=self.w, height=self.h, highlightthickness=0)
-        self.canvas.place(x=0, y=0)
-        self.canvas.configure(background='black')
+        self.canvas.place(x=MATTE_SIZE/2, y=MATTE_SIZE/2)
+        self.canvas.configure(background='#EEEEEE')
 
-        self.prev_button = tkinter.Button(self.root, text="Prev",
+        self.frame = tkinter.Frame(self.root)
+        self.frame.pack(side = tkinter.BOTTOM)
+        self.frame.configure(background='#EEEEEE')
+
+        self.prev_button = tkinter.Button(self.frame, text="Prev",
                 command=self.go_to_previous_image)
-        self.prev_button.pack(padx=30, ipadx=8, ipady=3, side = tkinter.LEFT)
+        self.prev_button.pack(padx=10, pady=5, side = tkinter.LEFT)
 
-        self.next_button = tkinter.Button(self.root, text="Next",
+        self.next_button = tkinter.Button(self.frame, text="Next",
                 command=self.go_to_next_image)
-        self.next_button.pack(padx=30, ipadx=8, ipady=3, side = tkinter.RIGHT)
+        self.next_button.pack(padx=10, pady=5, side = tkinter.RIGHT)
 
     def close(self, e):
         self.root.destroy()
