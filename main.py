@@ -14,6 +14,7 @@ from PIL import ExifTags
 AUTO_UPDATE_AT_CYCLE_END = True
 TIME_PER_IMAGE_IN_MS = 60 * 1000
 SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
+BG_COLOR = "#EEEEEE"
 
 MATTE_SIZE = 100
 
@@ -114,23 +115,25 @@ class Display:
         self.root.focus_set()
         self.root.focus()
         self.root.bind('<Escape>', self.close)
+        self.root.bind('<Left>', self.go_to_previous_image)
+        self.root.bind('<Right>', self.go_to_next_image)
         self.root.attributes('-fullscreen', True)
         self.root.title('jordscreen')
-        self.root.configure(background='#EEEEEE')
+        self.root.configure(background=BG_COLOR)
 
         self.canvas = tkinter.Canvas(self.root, width=self.w, height=self.h, highlightthickness=0)
         self.canvas.place(x=MATTE_SIZE/2, y=MATTE_SIZE/2)
-        self.canvas.configure(background='#EEEEEE')
+        self.canvas.configure(background=BG_COLOR)
 
         self.frame = tkinter.Frame(self.root)
         self.frame.pack(side = tkinter.BOTTOM)
-        self.frame.configure(background='#EEEEEE')
+        self.frame.configure(background=BG_COLOR)
 
-        self.prev_button = tkinter.Button(self.frame, text="Prev",
+        self.prev_button = tkinter.Button(self.frame, text="←",
                 command=self.go_to_previous_image)
         self.prev_button.pack(padx=10, pady=5, side = tkinter.LEFT)
 
-        self.next_button = tkinter.Button(self.frame, text="Next",
+        self.next_button = tkinter.Button(self.frame, text="→",
                 command=self.go_to_next_image)
         self.next_button.pack(padx=10, pady=5, side = tkinter.RIGHT)
 
@@ -156,7 +159,7 @@ class Display:
                 self.messages = get_updated_messages(self.service)
             self.cur_message = len(self.messages) - 1
 
-    def go_to_previous_image(self):
+    def go_to_previous_image(self, e=None):
         self.root.after_cancel(self.after_id)
 
         self.decrement_cur_message()
@@ -174,7 +177,7 @@ class Display:
         self.after_id = self.root.after(TIME_PER_IMAGE_IN_MS,
                 self.auto_update_image, self.service, self.messages)
 
-    def go_to_next_image(self):
+    def go_to_next_image(self, e=None):
         self.root.after_cancel(self.after_id)
 
         self.increment_cur_message()
