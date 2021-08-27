@@ -1,4 +1,3 @@
-import sys
 import os.path
 import base64
 import tkinter
@@ -109,12 +108,14 @@ class Display:
 
         self.root = tkinter.Tk()
         self.w, self.h = self.root.winfo_screenwidth(), self.root.winfo_screenheight()
-        self.root.overrideredirect(1)
         self.root.geometry("%dx%d+0+0" % (self.w, self.h))
         self.root.focus_set()
+        self.root.focus()
         self.root.bind('<Escape>', self.close)
+        self.root.attributes('-fullscreen', True)
+        self.root.title('jordscreen')
 
-        self.canvas = tkinter.Canvas(self.root, width=self.w, height=self.h)
+        self.canvas = tkinter.Canvas(self.root, width=self.w, height=self.h, highlightthickness=0)
         self.canvas.place(x=0, y=0)
         self.canvas.configure(background='black')
 
@@ -126,9 +127,8 @@ class Display:
                 command=self.go_to_next_image)
         self.next_button.pack(padx=30, ipadx=8, ipady=3, side = tkinter.RIGHT)
 
-    #TODO this doesn't work for some reason
-    def close(self):
-        sys.destroy()
+    def close(self, e):
+        self.root.destroy()
 
     def set_current_image(self, pilImage):
         self.current_image = ImageTk.PhotoImage(self.resize_image(pilImage))
