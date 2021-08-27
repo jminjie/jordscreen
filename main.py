@@ -1,3 +1,4 @@
+import sys
 import os.path
 import base64
 import tkinter
@@ -56,11 +57,10 @@ def get_attachment_id_for_simple_msg(msg):
 def get_attachment_from_id(service, msg_id, attachment_id):
     file_path = 'cache/' + msg_id
     if os.path.exists(file_path):
-        print("cache hit!")
         with open(file_path) as reader:
             return reader.read()
     else:
-        print("cache miss, downloading attachment")
+        print("Cache miss, downloading attachment")
         attachment = service.users().messages().attachments().get(userId='me',
                 messageId=msg_id, id=attachment_id).execute()
         with open(file_path, 'w') as writer:
@@ -75,22 +75,18 @@ def get_image_from_base64url(b64):
             break
     exif = image._getexif()
     if exif is None:
-        print("no exif")
         return image
 
     if orientation not in exif.keys():
         # handles KeyError 274
-        print("unexpected orientation", orientation)
+        print("Unexpected orientation =", orientation)
         return image
 
     if exif[orientation] == 3:
-        print("rotating 1")
         image=image.rotate(180, expand=True)
     elif exif[orientation] == 6:
-        print("rotating 2")
         image=image.rotate(270, expand=True)
     elif exif[orientation] == 8:
-        print("rotating 3")
         image=image.rotate(90, expand=True)
 
     return image
@@ -100,16 +96,11 @@ def get_pil_image_from_id(service, msg_id):
     attachment_id = get_attachment_id_for_simple_msg(msg)
 
     if attachment_id is not None:
-        print("attachment_id = ", attachment_id)
         attachment = get_attachment_from_id(service, msg_id, attachment_id)
         return get_image_from_base64url(attachment)
     else:
-        print("Problem getting attachment.")
+        print("Problem getting attachment attachment_id =", attachment_id)
         return None
-
-def on_next_button(display):
-    #TODO
-    print("WE PRESSED THE BUTTON WOOHOO")
 
 class Display:
     def __init__(self, service, messages):
@@ -118,19 +109,26 @@ class Display:
 
         self.root = tkinter.Tk()
         self.w, self.h = self.root.winfo_screenwidth(), self.root.winfo_screenheight()
-        #TODO
-        #self.root.overrideredirect(1)
+        self.root.overrideredirect(1)
         self.root.geometry("%dx%d+0+0" % (self.w, self.h))
         self.root.focus_set()
-
-        self.next_button = tkinter.Button(self.root, text="Previous", command=self.go_to_previous_image)
-        self.next_button.pack()
-        self.next_button = tkinter.Button(self.root, text="Next", command=self.go_to_next_image)
-        self.next_button.pack()
+        self.root.bind('<Escape>', self.close)
 
         self.canvas = tkinter.Canvas(self.root, width=self.w, height=self.h)
-        self.canvas.pack()
+        self.canvas.place(x=0, y=0)
         self.canvas.configure(background='black')
+
+        self.prev_button = tkinter.Button(self.root, text="Prev",
+                command=self.go_to_previous_image)
+        self.prev_button.pack(padx=30, ipadx=8, ipady=3, side = tkinter.LEFT)
+
+        self.next_button = tkinter.Button(self.root, text="Next",
+                command=self.go_to_next_image)
+        self.next_button.pack(padx=30, ipadx=8, ipady=3, side = tkinter.RIGHT)
+
+    #TODO this doesn't work for some reason
+    def close(self):
+        sys.destroy()
 
     def set_current_image(self, pilImage):
         self.current_image = ImageTk.PhotoImage(self.resize_image(pilImage))
@@ -157,12 +155,10 @@ class Display:
         self.decrement_cur_message()
         message = self.messages[self.cur_message]
         msg_id = message['id']
-        print("msg_id =", msg_id)
         msg = get_message_from_id(self.service, msg_id)
         attachment_id = get_attachment_id_for_simple_msg(msg)
 
         if attachment_id is not None:
-            print("attachment_id = ", attachment_id)
             attachment = get_attachment_from_id(self.service, msg_id, attachment_id)
             #TODO check if this attachment is an image
             pilImage = get_image_from_base64url(attachment)
@@ -177,12 +173,10 @@ class Display:
         self.increment_cur_message()
         message = self.messages[self.cur_message]
         msg_id = message['id']
-        print("msg_id =", msg_id)
         msg = get_message_from_id(self.service, msg_id)
         attachment_id = get_attachment_id_for_simple_msg(msg)
 
         if attachment_id is not None:
-            print("attachment_id = ", attachment_id)
             attachment = get_attachment_from_id(self.service, msg_id, attachment_id)
             #TODO check if this attachment is an image
             pilImage = get_image_from_base64url(attachment)
@@ -198,12 +192,10 @@ class Display:
         # show first image
         message = self.messages[self.cur_message]
         msg_id = message['id']
-        print("msg_id =", msg_id)
         msg = get_message_from_id(self.service, msg_id)
         attachment_id = get_attachment_id_for_simple_msg(msg)
 
         if attachment_id is not None:
-            print("attachment_id = ", attachment_id)
             attachment = get_attachment_from_id(self.service, msg_id, attachment_id)
             #TODO check if this attachment is an image
             pilImage = get_image_from_base64url(attachment)
@@ -228,7 +220,6 @@ class Display:
 
         message = messages[self.cur_message]
         msg_id = message['id']
-        print("msg_id =", msg_id)
         self.set_current_image(get_pil_image_from_id(service, msg_id))
 
         self.after_id = self.root.after(TIME_PER_IMAGE_IN_MS,
