@@ -117,9 +117,11 @@ class Display:
         self.root.bind('<Escape>', self.close)
         self.root.bind('<Left>', self.go_to_previous_image)
         self.root.bind('<Right>', self.go_to_next_image)
+        self.root.bind('<Button-1>', self.go_to_next_image)
         self.root.attributes('-fullscreen', True)
         self.root.title('jordscreen')
         self.root.configure(background=BG_COLOR)
+        self.root.config(cursor="none")
 
         self.canvas = tkinter.Canvas(self.root, width=self.w, height=self.h, highlightthickness=0)
         self.canvas.place(x=MATTE_SIZE/2, y=MATTE_SIZE/2)
@@ -129,13 +131,13 @@ class Display:
         self.frame.pack(side = tkinter.BOTTOM)
         self.frame.configure(background=BG_COLOR)
 
-        self.prev_button = tkinter.Button(self.frame, text="←",
-                command=self.go_to_previous_image)
-        self.prev_button.pack(padx=10, pady=5, side = tkinter.LEFT)
-
-        self.next_button = tkinter.Button(self.frame, text="→",
-                command=self.go_to_next_image)
-        self.next_button.pack(padx=10, pady=5, side = tkinter.RIGHT)
+#        self.prev_button = tkinter.Button(self.frame, text="←",
+#                command=self.go_to_previous_image)
+#        self.prev_button.pack(padx=10, pady=5, side = tkinter.LEFT)
+#
+#        self.next_button = tkinter.Button(self.frame, text="→",
+#                command=self.go_to_next_image)
+#        self.next_button.pack(padx=10, pady=5, side = tkinter.RIGHT)
 
     def close(self, e):
         self.root.destroy()
